@@ -1,0 +1,77 @@
+<html>
+    <head>
+        <h1>Login Page</h1>
+          <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+          <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+          <style>
+            input {
+                padding: 14px 20px;
+                width: 80%;
+                margin-left: 20px;
+            }
+            .fieldDiv .button {
+                margin-left: 20px;
+                margin-top: 20px;
+                font-size: 16px;
+                text-align: center;
+            }
+            h1 {
+                margin-left: 20px;
+            }
+          </style>
+        </head>
+    <body>
+        <div class="fieldDiv">
+            <input type="text" id="emailInput" placeholder="Email Here"/><br>
+            <input type="password" id="passwordInput" placeholder="Password Here"/><br>
+            <button class="button" type="button" id="loginButton" onclick="look()">Login</button>
+            <a href="register.html">
+                <button class="button">Register</button>
+            </a>
+            <!-- <button type="button" class="btn-success" id="Right" id="Refresh" onclick="get()">Refresh</button> -->
+        </div>
+
+        <script>
+            const url = "https://amazonaws.com/TaskLoginLambdaFunc";
+
+            function look() {
+                let email = document.getElementById("emailInput").value;
+                let password = document.getElementById("passwordInput").value;
+                $.ajax({
+                        url: url, // the url to make the request, create a const on top, should be the endpoint url of the api gateway set as a trigger to the lambda function
+                        dataType: 'json',
+                        type: 'post', // only post - can differentiate by including different stuffs in the data part blow
+                        async: false,
+                        contentType: 'application/json',
+                        data: JSON.stringify( { // put the email in this here as id, and type is get
+                            "type": "login",
+                            "email": email,
+                            "password": password } ),
+                        processData: false,
+                        success: function( data, textStatus, jQxhr ){
+                            // replace with response: 200 = ok | 250 = found email but wrong password | 300 = email not found
+                            //  data.statusCode;
+                            var statusGet = data.statusCode;
+                            console.log("Got status: " + statusGet);
+                            console.log("data: " + JSON.stringify(data));
+                            if (statusGet == 200) {
+                                // create a cookie of the email
+                                document.cookie = "loggedUserEmail=" + email + "; expires=Mon, 20 Jan 2025 12:00:00 UTC; path=/";
+                                alert("Login successful");
+                                window.location = "main.html"; // redirect to main
+                            } else if (statusGet == 250) {
+                                alert("Incorrect password");
+                            } else if (statusGet == 300) {
+                                alert("Account does not exists");
+                            }
+                        },
+                        error: function( jqXhr, textStatus, errorThrown ){
+                            console.log( errorThrown );
+                        }
+                });
+            }
+        </script>
+
+        
+    </body>
+</html>

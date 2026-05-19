@@ -1,0 +1,35 @@
+{
+	"type": "list",
+	"musicid": "3,4,10"
+}
+
+{
+	"type": "search",
+	"title": "",
+	"artist": "radiohead",
+	"year": ""
+}
+
+
+
+
+{
+	"type": "getUser",
+	"userEmail": "email@email.com"
+}
+{
+	"type": "editMusicSub",
+	"userEmail": "email@email.com",
+	"newMusicSub": "37,7,12,63,11,20,81,55"
+}
+{
+	"type": "login",
+	"email": "email@email.com",
+	"password": "012345"
+}
+{
+	"type": "register",
+	"email": "mewmew2@mailmail.com",
+	"username": "mew mew2",
+	"password": "mew321"
+}

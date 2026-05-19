@@ -1,0 +1,408 @@
+<html>
+    <head>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+        <style>
+            li {
+                padding: 20px;
+                display: inline-block;
+            }
+            input {
+                padding: 14px 20px;
+                width: 80%;
+                margin-left: 20px;
+            }
+            .searchFields .button {
+                margin-left: 20px;
+                font-size: 16px;
+                text-align: center;
+            }
+        </style>
+    </head>
+    <body onload="getLoggedUser()">
+        <div class="userInfo" id="userInfo">
+            <button class="button" type="button" id="logoutButton" onclick="logoutAction()">Logout</button>
+            <!-- User info here -->
+        </div>
+        <div id="listHere" class="listHere">
+            <!-- List of subscribed music goes here -->
+        </div>
+        <div class="searchFields">
+            <!-- fields and button to search music goes here -->
+            <input type="text" id="titleInput" placeholder="Title Here"/><br>
+            <input type="text" id="artistInput" placeholder="Artist Here"/><br>
+            <input type="text" id="yearInput" placeholder="Year Here"/><br>
+            <button class="button" type="button" id="queryButton" onclick="getSearchMusic()">Search</button>
+        </div>
+        <div id="searchResultHere" class="searchResultHere">
+            <!-- List of result for music search -->
+        </div>
+        <script>
+            const url1 = "https://amazonaws.com/TaskLoginLambdaFunc"; // for the login api
+            const url2 = "https://amazonaws.com/TaskMusicLambdaFunc"; // for the music api
+            const artistImgUrl = "https://amazonaws.com/s3artistImg";
+
+            // function to get the current logged in user (if there is one)
+            function getLoggedUser() {
+                // var musicIdString = ""
+                let keepGoing = false;
+                // get the cookie
+                let userEmail = getCookie("loggedUserEmail");
+                console.log("Logged: " + userEmail);
+                // get the user here, should be in localStorage. after getting the user, we got a bunch of musicid. use this musicid to get the songs in music dynamodb
+                // if (localStorage.getItem("loggedUserEmail") != null && localStorage.getItem("loggedUserEmail") != "null") {
+                if (userEmail != "") {
+                    localStorage.setItem("localUserEmail", userEmail);
+                    // let userEmail = loggedUser;
+                    // the localStorage has the item, get the user from the dynamodb
+                    ajaxPost(url1, "getUser", "");
+                    keepGoing = true;
+
+                    // get and display the user info here
+                    if (localStorage.getItem("settedUserInfo") == "null" || localStorage.getItem("settedUserInfo") == null) {
+                        let userDiv = document.getElementById("userInfo");
+                        let textNode = document.createElement("p");
+                        textNode.appendChild(document.createTextNode("Hello " + localStorage.getItem("userName")));
+                        textNode.appendChild(document.createElement("br"));
+                        textNode.appendChild(document.createTextNode(localStorage.getItem("userEmail")));
+                        textNode.appendChild(document.createElement("br"));
+                        textNode.appendChild(document.createElement("br"));
+                        textNode.appendChild(document.createTextNode("Your subscribed list:"))
+                        userDiv.appendChild(textNode);
+                        localStorage.setItem("settedUserInfo", "1");
+                    }
+                }
+
+                if (keepGoing) {
+                    // get the array of musics' id
+                    var subbedMusicArray = [];
+
+                    // get the songs from dynamodb
+                    ajaxPost(url2, "list", "");
+
+                    // get the localStorage string
+                    let getBack = localStorage.getItem("localSubbedMusic");
+                    if (getBack != null && getBack != "null") {
+                        subbedMusicArray = JSON.parse(getBack);
+                    }
+                    
+                    if (subbedMusicArray.length > 0) {
+                        // map the items into a list and render
+                        let array = []
+                        for (let i = 0; i < subbedMusicArray.length; i++) {
+                            // array.push(subbedMusicArray[i].title + ' ' + subbedMusicArray[i].artist + ' ' + subbedMusicArray[i].year);
+                            array.push(subbedMusicArray[i]);
+                        }
+                        let bigNode = document.createElement("ul");
+
+                        let mapArray = array.map(function(item) {
+                            let node = document.createElement("li"); // a node 
+                            // let textNode = document.createTextNode(item.title + "\n by " + item.artist + "\n released " + item.year + "  "); // put the item as a text
+                            // let textNode = document.createTextNode(item.title);
+                            node.appendChild(document.createTextNode(item.title));
+                            node.appendChild(document.createElement("br"));
+                            node.appendChild(document.createTextNode("by " + item.artist));
+                            node.appendChild(document.createElement("br"));
+                            node.appendChild(document.createTextNode("released " + item.year));
+                            node.appendChild(document.createElement("br"));
+
+                            // artist image
+                            let img = document.createElement("img");
+                            // img.src = item.img_url;
+                            img.src = artistImgUrl + item.id + ".jpg";
+                            img.width = "100";
+                            img.height = "100";
+
+                            // remove button
+                            let button = document.createElement("button");
+                            button.textContent = "Remove";
+                            button.classList.add("button");
+                            button.addEventListener("click", () => {
+                                // remvoe action here
+                                console.log("item: " + item.id + ' ' + item.title + ' ' + item.artist + ' ' + item.year + '\n' + "artist img: " + item.img_url + '\n' + "web img: " + item.web_url);
+                                // needs to update user musicsub attribute
+                                // get the current musicsub 
+                                var currentMusicSub = localStorage.getItem("musicIds");
+                                let currentMusicSubArray = currentMusicSub.split(',');
+                                
+                                let indexRemove = -1;
+                                for (let i = 0; i < currentMusicSubArray.length; i++) {
+                                    if (item.id == parseInt(currentMusicSubArray[i])) {
+                                        indexRemove = i;
+                                    }
+                                }
+                                if (indexRemove > -1) {
+                                    currentMusicSubArray.splice(indexRemove, 1);
+                                }
+                                currentMusicSub = currentMusicSubArray.toString();
+
+                                // now use currentMusicSub to update the item in login dynamodb
+                                ajaxPost(url1, "editMusicSub", currentMusicSub);
+
+                                // reset and re-read the user stuffs after user just remove a song
+                                resetDiv("listHere");
+                                getLoggedUser(); 
+                            })
+                            ///
+                            // node.appendChild(textNode);
+                            node.appendChild(img);
+                            node.appendChild(document.createElement("br"));
+                            node.appendChild(button); // remember to actually add the button here
+                            bigNode.appendChild(node);
+                            
+                            // return node;
+                        })
+                        // need to remove existing list 1st
+                        // resetDiv("listHere");
+                        // getLoggedUser();
+                        document.getElementById("listHere").appendChild(bigNode);
+                    } else { // if subbedMusic <= 0
+                        resetDiv("listHere");
+                        let node = document.createElement("p"); // a node 
+                        let textNode = document.createTextNode("You have not subscribed to any song yet."); // put the item as a text
+
+                        node.appendChild(textNode);
+                        document.getElementById("listHere").appendChild(node);
+                    }
+                } else {
+                    // need to remove existing list 1st
+                    resetDiv("listHere");
+                    let node = document.createElement("p"); // a node 
+                    let textNode = document.createTextNode("Please login to see your subscribed music."); // put the item as a text
+
+                    node.appendChild(textNode);
+                    document.getElementById("listHere").appendChild(node);
+                }
+            }
+            /// End of function to get logged in user
+
+            /// function for search music ///////////////////////////////////////////////////////
+            function getSearchMusic() {
+                // get the values here
+                var title = document.getElementById("titleInput").value;
+                var artist = document.getElementById("artistInput").value;
+                var year = document.getElementById("yearInput").value;
+                if (title == null) {
+                    title = "";
+                }
+                if (artist == null) {
+                    artist = "";
+                }
+                if (year == null) {
+                    year = "";
+                }
+                localStorage.setItem("localTitle", title);
+                localStorage.setItem("localArtist", artist);
+                localStorage.setItem("localYear", year);
+                console.log(title + ' ' + artist + ' ' + year);
+
+                var searchedMusic = []; // to store music search result
+                ajaxPost(url2, "search", "");
+
+                let gotLocalSearch = localStorage.getItem("localSearchedMusic");
+                if (gotLocalSearch != null && gotLocalSearch != "null") {
+                    searchedMusic = JSON.parse(gotLocalSearch);
+                }
+
+                // need to also provide a response when there is no result (no items matching)
+                if (searchedMusic.length > 0) {
+                    // need to remove existing list 1st
+                    resetDiv("searchResultHere");
+                    // map the items into a list and render
+                    let array = []
+                    for (let i = 0; i < searchedMusic.length; i++) {
+                        array.push(searchedMusic[i]);
+                    }
+                    let bigNode = document.createElement("ul");
+                    let mapArray = array.map(function(item) {
+                        let node = document.createElement("li"); // a node 
+                        // let textNode = document.createTextNode(item.title + "\n by " + item.artist + "\n released " + item.year + "  "); // put the item as a text
+                        node.appendChild(document.createTextNode(item.title));
+                        node.appendChild(document.createElement("br"));
+                        node.appendChild(document.createTextNode("by " + item.artist));
+                        node.appendChild(document.createElement("br"));
+                        node.appendChild(document.createTextNode("released " + item.year));
+                        node.appendChild(document.createElement("br"));
+                        
+                        // artist image
+                        let img = document.createElement("img");
+                        // img.src = item.img_url;
+                        img.src = artistImgUrl + item.id + ".jpg";
+                        img.width = "100";
+                        img.height = "100";
+
+                        // subscribe button
+                        let button = document.createElement("button");
+                        button.textContent = "Subscribe";
+                        button.classList.add("button");
+                        button.addEventListener("click", () => {
+                            // subscribe action here
+                            console.log("item: " + item.id + ' ' + item.title + ' ' + item.artist + ' ' + item.year + '\n' + "artist img: " + item.img_url + '\n' + "web img: " + item.web_url);
+                        
+                            // needs to update user musicsub attribute
+                            // get the current musicsub 
+                            // check if the song is already in there
+                            let currentMusicSub = localStorage.getItem("musicIds");
+                            if (currentMusicSub == "undefined") {
+                                currentMusicSub = "";
+                            }
+                            let currentMusicSubArray = currentMusicSub.split(',');
+                            
+                            let subExists = false;
+                            for (let i = 0; i < currentMusicSubArray.length; i++) {
+                                if (item.id == parseInt(currentMusicSubArray[i])) {
+                                    subExists = true;
+                                }
+                            }
+                            if (!subExists) {
+                                if (currentMusicSub != "") {
+                                    currentMusicSub = localStorage.getItem("musicIds") + ',' + item.id.toString();
+                                } else {
+                                    currentMusicSub = item.id.toString();
+                                }
+                                
+                                // now use currentMusicSub to update the item in login dynamodb
+                                ajaxPost(url1, "editMusicSub", currentMusicSub);
+                                // re-read the user stuffs after user just sub to new song
+                                resetDiv("listHere");
+                                getLoggedUser(); 
+                            } else {
+                                console.log("Already subscribed to this song");
+                            }
+                            // let currentMusicSub = localStorage.getItem("musicIds") + ',' + item.id.toString();
+                        })
+                        ///
+                        // need to remove existing list 1st
+                        // resetDiv("searchResultHere");
+                        // getLoggedUser();
+                        // node.appendChild(textNode);
+                        node.appendChild(img);
+                        node.appendChild(document.createElement("br"));
+                        node.appendChild(button); // remember to actually add the button here
+                        bigNode.appendChild(node);
+                        
+                        // return node;
+                    })
+                    document.getElementById("searchResultHere").appendChild(document.createTextNode("Search result:"));
+                    document.getElementById("searchResultHere").appendChild(document.createElement("br"));
+                    document.getElementById("searchResultHere").appendChild(bigNode);
+                } else { // searchedMusic <= 0
+                    // need to remove existing list 1st
+                    resetDiv("searchResultHere");
+                    let node = document.createElement("p"); // a node 
+                    let textNode = document.createTextNode("No result is retrieved. Please query again"); // put the item as a text
+
+                    node.appendChild(textNode);
+                    document.getElementById("searchResultHere").appendChild(node);
+                    // return node;
+                }
+            }
+            
+            // get cookies - from w3schools.com
+            // https://www.w3schools.com/js/js_cookies.asp
+            function getCookie(cname) {
+                let name = cname + "=";
+                let decodedCookie = decodeURIComponent(document.cookie);
+                let ca = decodedCookie.split(';');
+                for(let i = 0; i <ca.length; i++) {
+                    let c = ca[i];
+                    while (c.charAt(0) == ' ') {
+                    c = c.substring(1);
+                    }
+                    if (c.indexOf(name) == 0) {
+                    return c.substring(name.length, c.length);
+                    }
+                }
+                return "";
+            }
+
+            function resetDiv(divName) {
+                let bigGuy = document.getElementById(divName);
+                while (bigGuy.firstChild) {
+                    bigGuy.removeChild(bigGuy.lastChild);
+                }
+            }
+
+            function logoutAction() {
+                localStorage.clear();
+                document.cookie = "loggedUserEmail=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+                // redirect to login
+                window.location.href = "index.html";
+            }
+
+            function ajaxPost(url, ajaxType, currentMusicSub) {
+                let sendData = "";
+                let successFunc = null;
+
+                if (ajaxType == "getUser") {
+                    let userEmail = localStorage.getItem("localUserEmail");
+                    sendData = JSON.stringify( { // put the email in this here as id, and type is get
+                        "type": "getUser",
+                        "userEmail": userEmail });
+
+                    successFunc = function successReturn(data, textStatus, jQxhr) {
+                        localStorage.setItem("musicIds", data.Item.musicsub)
+                        localStorage.setItem("userName", data.Item.user_name);
+                        localStorage.setItem("userEmail", data.Item.email);
+                        // musicIdString = data.Item.musicsub;
+                        localStorage.setItem("localMusicId", data.Item.musicsub);
+                    }
+                } else if (ajaxType == "list") {
+                    sendData = JSON.stringify( {
+                        "type": "list",
+                        "musicid": localStorage.getItem("localMusicId") });
+                    successFunc = function successReturn(data, textStatus, jQxhr) {
+                        // subbedMusicArray = data.Responses.music
+                        // localStorage.setItem("localSubbedMusic", subbedMusicArray);
+                        console.log(data);
+                        if (data == null || data == "null") {
+                            localStorage.setItem("localSubbedMusic", null)
+                        } else {
+                            let arrayString = JSON.stringify(data.Responses.music);
+                            localStorage.setItem("localSubbedMusic", arrayString);
+                        }
+                    }
+                } else if (ajaxType == "editMusicSub") {
+                    sendData = JSON.stringify( { // put the email in this here as id, and type is get
+                        "type": "editMusicSub",
+                        "userEmail": localStorage.getItem("userEmail"),
+                        "newMusicSub": currentMusicSub });
+                    successFunc = function successReturn(data, textStatus, jQxhr) {
+                        localStorage.setItem("musicIds", data.Attributes.musicsub);
+                    }
+                } else if (ajaxType) {
+                    sendData = JSON.stringify( { // put the email in this here as id, and type is get
+                        "type": "search",
+                        "title": localStorage.getItem("localTitle"),
+                        "artist": localStorage.getItem("localArtist"),
+                        "year": localStorage.getItem("localYear") });
+                    successFunc = function successReturn(data, textStatus, jQxhr) {
+                        console.log(data.Items); // data.Items.music is the array of object i think?
+                        // create a list to render here
+                        // searchedMusic = data.Items;
+                        if (data == null || data == "null") {
+                            localStorage.setItem("localSearchedMusic", null);
+                        } else {    
+                            let arrayString = JSON.stringify(data.Items);
+                            localStorage.setItem("localSearchedMusic", arrayString);
+                        }
+                    }
+                }
+
+                $.ajax({
+                        url: url, // the url to make the request, create a const on top, should be the endpoint url of the api gateway set as a trigger to the lambda function
+                        dataType: 'json',
+                        type: 'post', // only post - can differentiate by including different stuffs in the data part blow
+                        async: false,
+                        contentType: 'application/json',
+                        data: sendData,
+                        processData: false,
+                        success: successFunc,
+                        error: function( jqXhr, textStatus, errorThrown ){
+                            console.log( errorThrown );
+                        }
+                });
+            }
+        </script>
+    </body>
+</html>
